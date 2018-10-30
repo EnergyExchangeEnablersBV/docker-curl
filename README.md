@@ -1,2 +1,2 @@
 # docker-curl
-Docker image for curl statements
+A docker image based on Ubuntu with curl installed.
