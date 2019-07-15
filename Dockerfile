@@ -1,4 +1,4 @@
-FROM ubuntu:18.10
+FROM ubuntu:19.04
 
 MAINTAINER EnergyExchangeEnablers <info@exe.energy>
 
