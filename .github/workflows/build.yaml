@@ -1,0 +1,62 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - 'develop'
+      - 'master'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      # 01: Setup Environment
+      - name: Checkout the git repository
+        uses: actions/checkout@v2
+      - run: |
+          git fetch --prune --unshallow
+
+      # 02: Build container
+      - name: Configure AWS credentials npc_github_ecr
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.NPC_GITHUB_ECR_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.NPC_GITHUB_ECR_AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Set branch
+        id: branch
+        run: echo ::set-output name=branch::${GITHUB_REF#refs/*/}
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_IMAGE_REPO: ${{ github.event.repository.name }}
+          ECR_NAMESPACE: entrnce
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          GIT_BRANCH: ${{ steps.branch.outputs.branch }}
+          GIT_SHA: ${{ github.sha }}
+          GIT_TIMESTAMP: ${{ github.event.repository.created_at }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_NAMESPACE/$ECR_IMAGE_REPO:$GIT_BRANCH -t $ECR_REGISTRY/$ECR_NAMESPACE/$ECR_IMAGE_REPO:$GIT_SHA -t $ECR_REGISTRY/$ECR_NAMESPACE/$ECR_IMAGE_REPO:$GIT_TIMESTAMP .
+          docker push $ECR_REGISTRY/$ECR_NAMESPACE/$ECR_IMAGE_REPO
+
+      - name: Logout of Amazon ECR
+        if: always()
+        run: docker logout ${{ steps.login-ecr.outputs.registry }}
+
+      # 02: Notification
+      - name: Notify if a step fails on Slack
+        if: always()
+        uses: innocarpe/actions-slack@v1
+        with:
+          status: ${{ job.status }} # Required
+          failure_text: '@${{ github.actor }}: Your build on `${{ github.repository }}` failed 😱'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUBTOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
